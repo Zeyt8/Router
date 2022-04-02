@@ -262,6 +262,13 @@ int parse_arp_table(char *path, struct arp_entry *arp_table)
 	return i;
 }
 
+void build_ethhdr(struct ether_header *eth_hdr, uint8_t *sha, uint8_t *dha, unsigned short type)
+{
+	memcpy(eth_hdr->ether_dhost, dha, ETH_ALEN);
+	memcpy(eth_hdr->ether_shost, sha, ETH_ALEN);
+	eth_hdr->ether_type = type;
+}
+
 void send_icmp(uint32_t daddr, uint32_t saddr, uint8_t *sha, uint8_t *dha, u_int8_t type, u_int8_t code, int interface, int id, int seq)
 {
 

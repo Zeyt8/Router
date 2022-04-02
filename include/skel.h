@@ -157,6 +157,8 @@ int read_rtable(const char *path, struct route_table_entry *rtable);
  * */
 int parse_arp_table(char *path, struct arp_entry *arp_table);
 
+void build_ethhdr(struct ether_header *eth_hdr, uint8_t *sha, uint8_t *dha, unsigned short type);
+
 /**
  * @brief 
  * 

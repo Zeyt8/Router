@@ -157,4 +157,72 @@ int read_rtable(const char *path, struct route_table_entry *rtable);
  * */
 int parse_arp_table(char *path, struct arp_entry *arp_table);
 
+/**
+ * @brief 
+ * 
+ * @param daddr destination IP
+ * @param saddr source IP
+ * @param sha source MAC
+ * @param dha destination MAC
+ * @param type Type
+ * @param code Code
+ * @param interface interface 
+ * @param id id
+ * @param seq sequence
+ */
+void send_icmp(uint32_t daddr, uint32_t saddr, uint8_t *sha, uint8_t *dha, u_int8_t type, u_int8_t code, int interface, int id, int seq);
+
+
+/**
+ * @brief 
+ * 
+ * @param daddr destination IP
+ * @param saddr source IP
+ * @param sha source MAC
+ * @param dha destination MAC
+ * @param type Type
+ * @param code Code
+ * @param interface interface 
+ */
+void send_icmp_error(uint32_t daddr, uint32_t saddr, uint8_t *sha, uint8_t *dha, u_int8_t type, u_int8_t code, int interface);
+
+
+/**
+ * @brief 
+ * 
+ * @param daddr destination IP address
+ * @param saddr source IP address
+ * @param eth_hdr ethernet header
+ * @param interface interface
+ * @param arp_op ARP OP: ARPOP_REQUEST or ARPOP_REPLY
+ */
+void send_arp(uint32_t daddr, uint32_t saddr, struct ether_header *eth_hdr, int interface, uint16_t arp_op);
+
+/**
+ * @brief 
+ * 
+ * @param buffer 
+ * @return struct icmphdr* A pointer to a structure of type icmphdr that is inside the buffer. Basically, we return the
+ * icmp header from buffer.
+ * If this is not an ICMP packet, we return NULL.
+ */
+struct icmphdr * parse_icmp(void *buffer);
+
+/**
+ * @brief 
+ * 
+ * @param buffer 
+ * @return struct arp_header* A pointer to a structure of type arp_header that is inside the buffer. Basically, we return the
+ * arp header from buffer.
+ * If this is not an ARP frame, we return NULL.
+ */
+struct arp_header* parse_arp(void *buffer);
+
+/**
+ * hwaddr_aton - Convert ASCII string to MAC address (colon-delimited format)
+ * @txt: MAC address as a string (e.g., "00:11:22:33:44:55")
+ * @addr: Buffer for the MAC address (ETH_ALEN = 6 bytes)
+ * Returns: 0 on success, -1 on failure (e.g., string not a MAC address)
+ */
+int hwaddr_aton(const char *txt, uint8_t *addr);
 #endif /* _SKEL_H_ */

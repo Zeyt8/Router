@@ -7,13 +7,33 @@ list arp_table;
 queue packageQueue;
 
 /**
- * @brief 
+ * @brief Handles an ARP packet
+ * 
+ * @param m packet to handle
+ * @param arp_hdr ARP header of the packet
+ * @param ethernet_hdr Ethernet header of the packet
+ * @return true: the handling was succesful
+ * @return false: drop the package
+ */
+bool handleARP(packet m, struct arp_header* arp_hdr, struct ether_header* ethernet_hdr);
+/**
+ * @brief Handles ICMP packet
+ * 
+ * @param m packet
+ * @param icmp_hdr ICMP header of packet
+ * @param ip_hdr IP header of packet
+ * @param ethernet_hdr Ethernet header of packet
+ * @return true: Success
+ * @return false: Drop the packet
+ */
+bool handleICMP(packet m, struct icmphdr* icmp_hdr, struct iphdr* ip_hdr, struct ether_header* ethernet_hdr);
+/**
+ * @brief Finds ipv4 address in arp_table if it exists
  * 
  * @param m packet
  * @return struct arp_entry* 
  */
 struct arp_entry* checkIfIPv4ExistsInARP(__u32 ip);
-
 /**
  * @brief Create a Ethernet Header object
  * 
@@ -38,6 +58,7 @@ int main(int argc, char *argv[])
 		rc = get_packet(&m);
 		DIE(rc < 0, "get_packet");
 		/* TODO */
+		
 		struct arp_header* arp_hdr = parse_arp(m.payload);
 		struct ether_header* ethernet_hdr = (struct ether_header*)m.payload;
 		struct icmphdr* icmp_hdr = parse_icmp(m.payload);
@@ -46,33 +67,18 @@ int main(int argc, char *argv[])
 		//If ARP package
 		if(arp_hdr != NULL)
 		{
-			in_addr_t address = inet_addr(get_interface_ip(m.interface));
-			//If request for this router
-			if(ntohs(arp_hdr->op) == 1 && arp_hdr->tpa == address)
+			bool success = handleARP(m, arp_hdr, ethernet_hdr);
+			if(!success)
 			{
-				uint8_t mac = malloc(sizeof(6));
-				get_interface_mac(m.interface, mac);
-				struct ether_header* e_h = createEthernetHeader(mac, ethernet_hdr->ether_shost, ethernet_hdr->ether_type);
-				end_arp(arp_hdr->spa, arp_hdr->tpa, e_h, m.interface, htons(2));
-			}
-			else if(ntohs(arp_hdr->op) == 1){
 				continue;	//Drop the package
-			}
-			//If reply
-			else if(ntohs(arp_hdr->op) == 2)
-			{
-
 			}
 		}
 		else if(icmp_hdr != NULL)
 		{
-			in_addr_t address = inet_addr(get_interface_ip(m.interface));
-			if(ip_hdr->daddr == address && icmp_hdr->type == 8)
+			bool success = handleICMP(m, icmp_hdr, ip_hdr, ethernet_hdr);
+			if(!success)
 			{
-				send_icmp(ip_hdr->saddr, ip_hdr->daddr, ethernet_hdr->ether_dhost, ethernet_hdr->ether_shost, 0, 0, m.interface, icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence);
-			}
-			else if(ip_hdr->daddr == address){
-				continue;	//Drop the package
+				continue;
 			}
 		}
 		else
@@ -93,6 +99,47 @@ int main(int argc, char *argv[])
 		{
 
 		}
+	}
+}
+
+bool handleARP(packet m, struct arp_header* arp_hdr, struct ether_header* ethernet_hdr)
+{
+	in_addr_t address = inet_addr(get_interface_ip(m.interface));
+	//If request for this router
+	if(ntohs(arp_hdr->op) == 1 && arp_hdr->tpa == address)
+	{
+		uint8_t mac = malloc(sizeof(6));
+		get_interface_mac(m.interface, mac);
+		struct ether_header* e_h = createEthernetHeader(mac, ethernet_hdr->ether_shost, ethernet_hdr->ether_type);
+		end_arp(arp_hdr->spa, arp_hdr->tpa, e_h, m.interface, htons(2));
+	}
+	else if(ntohs(arp_hdr->op) == 1){
+		return false;	//Drop the package
+	}
+	//If reply
+	else if(ntohs(arp_hdr->op) == 2)
+	{
+		struct arp_entry* arp_e = malloc(sizeof(struct arp_entry));
+		arp_e->ip = arp_hdr->spa;
+		memcpy(arp_e->mac, ethernet_hdr->ether_shost, 6);
+		cons(arp_e, arp_table);
+		if(!queue_empty(packageQueue))
+		{
+			packet* pack = queue_deq(packageQueue);
+		}
+	}
+}
+
+bool handleICMP(packet m, struct icmphdr* icmp_hdr, struct iphdr* ip_hdr, struct ether_header* ethernet_hdr)
+{
+	in_addr_t address = inet_addr(get_interface_ip(m.interface));
+	if(ip_hdr->daddr == address && icmp_hdr->type == 8)
+	{
+		send_icmp(ip_hdr->saddr, ip_hdr->daddr, ethernet_hdr->ether_dhost, ethernet_hdr->ether_shost, 0, 0, m.interface, icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence);
+	}
+	else if(ip_hdr->daddr == address)
+	{
+		return false;	//Drop the package
 	}
 }
 

@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "./checker.py", line 77, in <module>
+    main()
+  File "./checker.py", line 71, in main
+    passive(args.host, args.testname)
+  File "./checker.py", line 38, in passive
+    status = fn(testname, packets)
+  File "/home/focabogdan/Documents/GitHub/Communication-Protocols-Project-1/tests.py", line 459, in host_unreachable_p
+    if ICMP not in packets[1]:
+IndexError: list index out of range

@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "ethernet.h": "c"
+        "ethernet.h": "c",
+        "skel.h": "c"
     }
 }

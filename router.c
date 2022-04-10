@@ -4,7 +4,7 @@
 #include "list.h"
 #include <stdio.h>
 
-list arp_table;
+list arp_table = NULL;
 queue packageQueue;
 FILE* file;
 /**
@@ -63,7 +63,7 @@ struct arp_entry* checkIfIPv4ExistsInARP(__u32 ip);
  * @return true: ttl and checksum check out
  * @return false: ttl expired or checksum is wrong 
  */
-bool checkTTLAndChecksum(packet m, struct iphdr ip_header, struct ether_header ethernet_header, struct icmphdr icmp_hdr);
+bool checkTTLAndChecksum(packet m, struct iphdr ip_header, struct ether_header ethernet_header, struct icmphdr* icmp_hdr);
 void changeEtherHeader(packet* m,  struct ether_header* eth_hdr);
 /**
  * @brief Recalculates checksum if only ttl was decremented
@@ -77,12 +77,11 @@ uint16_t ttlDecrementChecksum(packet* m, struct iphdr* ip_hdr);
  * @brief Get strictest route from table
  * 
  * @param routeTable 
+ * @param routeTableLength
  * @param ip_hdr 
- * @param l
- * @param r
  * @return int
  */
-int getRoute(struct route_table_entry* routeTable, struct iphdr ip_hdr, int l, int r);
+int getRoute(struct route_table_entry* routeTable, size_t routeTableLength, struct iphdr ip_hdr);
 /**
  * @brief 
  * 
@@ -131,7 +130,7 @@ void sendICMP(uint32_t daddr, uint32_t saddr, uint8_t *sha, uint8_t *dha, u_int8
  */
 void sendARP(uint32_t daddr, uint32_t saddr, struct ether_header *eth_hdr, int interface, uint16_t arp_op);
 
-void merge(struct route_table_entry* arr, int l, int m, int r)
+void mergeByPrefix(struct route_table_entry* arr, int l, int m, int r)
 {
     int i, j, k;
     int n1 = m - l + 1;
@@ -174,15 +173,70 @@ void merge(struct route_table_entry* arr, int l, int m, int r)
     }
 }
   
-void mergeSort(struct route_table_entry* arr, int l, int r)
+void mergeSortByPrefix(struct route_table_entry* arr, int l, int r)
 {
     if (l < r) {
         int m = l + (r - l) / 2;
   
-        mergeSort(arr, l, m);
-        mergeSort(arr, m + 1, r);
+        mergeSortByPrefix(arr, l, m);
+        mergeSortByPrefix(arr, m + 1, r);
   
-        merge(arr, l, m, r);
+        mergeByPrefix(arr, l, m, r);
+    }
+}
+
+void mergeByMask(struct route_table_entry* arr, int l, int m, int r)
+{
+    int i, j, k;
+    int n1 = m - l + 1;
+    int n2 = r - m;
+  
+    struct route_table_entry* L, *R;
+	L = (struct route_table_entry*)malloc(sizeof(struct route_table_entry) * n1);
+	R = (struct route_table_entry*)malloc(sizeof(struct route_table_entry) * n2);
+  
+    for (i = 0; i < n1; i++)
+        L[i] = arr[l + i];
+    for (j = 0; j < n2; j++)
+        R[j] = arr[m + 1 + j];
+  
+    i = 0; // Initial index of first subarray
+    j = 0; // Initial index of second subarray
+    k = l; // Initial index of merged subarray
+    while (i < n1 && j < n2) {
+        if (L->mask >= R->mask) {
+            arr[k] = L[i];
+            i++;
+        }
+        else {
+            arr[k] = R[j];
+            j++;
+        }
+        k++;
+    }
+  
+    while (i < n1) {
+        arr[k] = L[i];
+        i++;
+        k++;
+    }
+  
+    while (j < n2) {
+        arr[k] = R[j];
+        j++;
+        k++;
+    }
+}
+
+void mergeSortByMask(struct route_table_entry* arr, int l, int r)
+{
+    if (l < r) {
+        int m = l + (r - l) / 2;
+  
+        mergeSortByMask(arr, l, m);
+        mergeSortByMask(arr, m + 1, r);
+  
+        mergeByMask(arr, l, m, r);
     }
 }
 
@@ -199,7 +253,44 @@ file = fopen("aa.txt", "w+");
 	struct route_table_entry* routeTable = malloc(sizeof(struct route_table_entry) * 80000);
 	int routeTableLength = read_rtable(argv[1], routeTable);
 
-	mergeSort(routeTable, 0, routeTableLength - 1);
+	mergeSortByMask(routeTable, 0, routeTableLength - 1);
+	mergeSortByPrefix(routeTable, 0, routeTableLength - 1);
+
+	struct arp_entry* arp1 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
+	arp1->ip = inet_addr("192.168.0.2");
+	hwaddr_aton("de:ad:be:ef:00:00", arp1->mac);
+	arp_table = cons(arp1, arp_table);
+
+	struct arp_entry* arp2 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
+	arp2->ip = inet_addr("192.168.1.2");
+	hwaddr_aton("de:ad:be:ef:00:01", arp2->mac);
+	arp_table = cons(arp2, arp_table);
+
+	struct arp_entry* arp3 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
+	arp3->ip = inet_addr("192.168.2.2");
+	hwaddr_aton("de:ad:be:ef:00:02", arp3->mac);
+	arp_table = cons(arp3, arp_table);
+
+	struct arp_entry* arp4 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
+	arp4->ip = inet_addr("192.168.3.2");
+	hwaddr_aton("de:ad:be:ef:00:03", arp4->mac);
+	arp_table = cons(arp4, arp_table);
+
+	struct arp_entry* arp5 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
+	arp5->ip = inet_addr("192.0.1.1");
+	hwaddr_aton("ca:fe:ba:be:00:01", arp5->mac);
+	arp_table = cons(arp5, arp_table);
+
+	struct arp_entry* arp6 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
+	arp6->ip = inet_addr("192.0.1.2");
+	hwaddr_aton("ca:fe:ba:be:01:00", arp6->mac);
+	arp_table = cons(arp6, arp_table);
+
+	struct arp_entry* ent = checkIfIPv4ExistsInARP(arp3->ip);
+	if(ent == NULL)
+	{
+		printf("this is null");
+	}
 
 	while (1) {
 		printf("\nwhile begin\n");
@@ -249,11 +340,11 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 		sendARP(arp_hdr->spa, arp_hdr->tpa, e_h, m.interface, htons(2));
 		free(e_h);
 		free(mac);
+
 		return false;
 	}
 	else if(ntohs(arp_hdr->op) == 1)
 	{
-		//bool success = handleForwarding(routeTable, routeTableLength, m, arp_hdr, ip_header, ethernet_hdr, icmp_hdr);
 		return false;	//Drop the package
 	}
 	//If reply
@@ -262,7 +353,7 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 		struct arp_entry* arp_e = malloc(sizeof(struct arp_entry));
 		arp_e->ip = arp_hdr->spa;
 		memcpy(arp_e->mac, ethernet_hdr->ether_shost, 6);
-		cons(arp_e, arp_table);
+		arp_table = cons(arp_e, arp_table);
 		if(!queue_empty(packageQueue))
 		{
 			packet* pack = queue_deq(packageQueue);
@@ -272,7 +363,7 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 			p_eth_hdr = (struct ether_header*)pack;
 			p_ip_hdr = (struct iphdr*)(pack->payload + sizeof(struct ether_header));
 
-			if(!checkTTLAndChecksum(m, *p_ip_hdr, *p_eth_hdr, *icmp_hdr))
+			if(!checkTTLAndChecksum(m, *p_ip_hdr, *p_eth_hdr, icmp_hdr))
 			{
 				return false;
 			}
@@ -280,7 +371,7 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 			p_ip_hdr->ttl--;
             p_ip_hdr->check = ttlDecrementChecksum(&m, p_ip_hdr);
 
-			int index = getRoute(routeTable, *p_ip_hdr, 0, routeTableLength - 1);
+			int index = getRoute(routeTable, routeTableLength, *p_ip_hdr);
 			struct route_table_entry route;
 
 			if(index == -1)
@@ -322,17 +413,11 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 
 bool handleICMP(packet m, struct icmphdr* icmp_hdr, struct iphdr* ip_hdr, struct ether_header* ethernet_hdr)
 {
-	if(!checkTTLAndChecksum(m, *ip_hdr, *ethernet_hdr, *icmp_hdr))
-	{
-		return false;
-	}
-	ip_hdr->ttl--;
-	ip_hdr->check = ttlDecrementChecksum(&m, ip_hdr);
-	
 	in_addr_t address = inet_addr(get_interface_ip(m.interface));
 	if(ip_hdr->daddr == address && icmp_hdr->type == 8)	//8 = echo request
 	{
 		sendICMP(ip_hdr->saddr, ip_hdr->daddr, ethernet_hdr->ether_dhost, ethernet_hdr->ether_shost, 0, 0, m.interface, icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence, false);
+		return false;
 	}
 	else if(ip_hdr->daddr == address)
 	{
@@ -342,7 +427,7 @@ bool handleICMP(packet m, struct icmphdr* icmp_hdr, struct iphdr* ip_hdr, struct
 }
 
 bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLength, packet m, struct arp_header* arp_hdr, struct iphdr* ip_hdr, struct ether_header* ethernet_hdr, struct icmphdr* icmp_hdr){
-	if(!checkTTLAndChecksum(m, *ip_hdr, *ethernet_hdr, *icmp_hdr))
+	if(!checkTTLAndChecksum(m, *ip_hdr, *ethernet_hdr, icmp_hdr))
 	{
 		return false;
 	}
@@ -350,7 +435,7 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 	ip_hdr->ttl--;
 	ip_hdr->check = ttlDecrementChecksum(&m, ip_hdr);
 
-	int index = getRoute(routeTable, *ip_hdr, 0, routeTableLength - 1);
+	int index = getRoute(routeTable, routeTableLength, *ip_hdr);
 	struct route_table_entry route;
 	if(index == -1)
 	{
@@ -358,13 +443,14 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 		return false;	//Drop packet
 	}
 	route = routeTable[index];
+	printf("%u %u %u %u", ip_hdr->daddr, route.prefix, route.next_hop, route.mask);
 
 	struct arp_entry* entry = checkIfIPv4ExistsInARP(route.next_hop);
+	uint8_t* macSource = (uint8_t*)malloc(sizeof(6));
+	get_interface_mac(m.interface, macSource);
 	if(entry == NULL)
 	{
 		queue_enq(packageQueue, &m);
-		uint8_t* macSource = (uint8_t*)malloc(sizeof(6));
-		get_interface_mac(m.interface, macSource);
 		uint8_t* macDest = (uint8_t*)malloc(sizeof(6));
 		hwaddr_aton("FF:FF:FF:FF:FF:FF", macDest);
 		struct ether_header* eth_hdr = createEthernetHeader(macSource, macDest, htons(0x806));
@@ -373,19 +459,22 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 
 		free(macSource);
 		free(macDest);
+		free(eth_hdr);
 		return false;
 	}
 	else
 	{
-		memcpy(ethernet_hdr->ether_dhost, entry->mac, 6);
+		struct ether_header* eth_hdr = createEthernetHeader(macSource, entry->mac, ethernet_hdr->ether_type);
+		changeEtherHeader(&m, eth_hdr);
 		m.interface = route.interface;
 
 		send_packet(&m);
+		free(eth_hdr);
 	}
 	return true;
 }
 
-struct arp_entry* checkIfIPv4ExistsInARP(__u32 ip)
+struct arp_entry* checkIfIPv4ExistsInARP(uint32_t ip)
 {
 	list currentElement = arp_table;
 	while(currentElement != NULL)
@@ -394,19 +483,19 @@ struct arp_entry* checkIfIPv4ExistsInARP(__u32 ip)
 		{
 			return (struct arp_entry*)currentElement->element;
 		}
+		currentElement = currentElement->next;
 	}
 	return NULL;
 }
 
-bool checkTTLAndChecksum(packet m, struct iphdr ip_header, struct ether_header ethernet_header, struct icmphdr icmp_hdr)
+bool checkTTLAndChecksum(packet m, struct iphdr ip_header, struct ether_header ethernet_header, struct icmphdr* icmp_hdr)
 {
 	if(ip_header.ttl <= 1)
 	{
 		//Send ttl error
-		sendICMP(ip_header.saddr, ip_header.daddr, ethernet_header.ether_dhost, ethernet_header.ether_shost, 11, 0, icmp_hdr.un.echo.id, icmp_hdr.un.echo.sequence, m.interface, true);
+		sendICMP(ip_header.saddr, ip_header.daddr, ethernet_header.ether_dhost, ethernet_header.ether_shost, 11, 0, icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence, m.interface, true);
 		return false;	//Drop the packet
 	}
-
 	__u16 check = ip_header.check;
 	ip_header.check = 0;
 	ip_header.check = ip_checksum((uint8_t*)&ip_header, sizeof(struct iphdr));
@@ -429,25 +518,41 @@ void changeEtherHeader(packet* m,  struct ether_header* eth_hdr)
 	memcpy(m->payload, eth_hdr, sizeof(struct ether_header));
 }
 
-int getRoute(struct route_table_entry* routeTable, struct iphdr ip_hdr, int l, int r)
+int getRoute(struct route_table_entry* routeTable, size_t routeTableLength, struct iphdr ip_hdr)
 {
-	if(r >= l)
+	/*int l = 0;
+	int r = routeTableLength - 1;
+	while(l <= r)
 	{
-		int mid = l + (r - 1) / 2;
-		if(routeTable[mid].prefix == (ip_hdr.daddr & routeTable[mid].mask))
+		int mid = l + (r - l) / 2;
+		if((mid == 0 || routeTable[mid - 1].prefix < (ip_hdr.daddr & routeTable[mid - 1].mask)) && routeTable[mid - 1].prefix == (ip_hdr.daddr & routeTable[mid].mask))
 		{
 			return mid;
 		}
-
-		if(routeTable[mid].prefix > (ip_hdr.daddr & routeTable[mid].mask))
+		else if((ip_hdr.daddr & routeTable[mid].mask) > routeTable[mid].prefix)
 		{
-			return getRoute(routeTable, ip_hdr, l, mid - 1);
+			l = mid + 1;
 		}
-
-		return getRoute(routeTable, ip_hdr, mid + 1, r);
+		else
+		{
+			r = mid - 1;
+		}
 	}
-
-	return -1;
+	return -1;*/
+	int index = -1;
+	int biggestMask = 0;
+	for(int i=0;i<routeTableLength;i++)
+	{
+		if((ip_hdr.daddr & routeTable[i].mask) == routeTable[i].prefix)
+		{
+			if(routeTable[i].mask > biggestMask)
+			{
+				index = i;
+				biggestMask = routeTable[i].mask;
+			}
+		}
+	}
+	return index;
 } 
 
 struct arp_header* getARPHeader(char *payload)
@@ -541,8 +646,8 @@ void sendARP(uint32_t daddr, uint32_t saddr, struct ether_header *eth_hdr, int i
 	struct arp_header arp_hdr;
 	packet packet;
 
-	arp_hdr.htype = htons(ARPHRD_ETHER);
-	arp_hdr.ptype = htons(2048);
+	arp_hdr.htype = htons(1);
+	arp_hdr.ptype = htons(0x0800);
 	arp_hdr.op = arp_op;
 	arp_hdr.hlen = 6;
 	arp_hdr.plen = 4;
@@ -552,7 +657,7 @@ void sendARP(uint32_t daddr, uint32_t saddr, struct ether_header *eth_hdr, int i
 	arp_hdr.tpa = daddr;
 	packet.interface = interface;
 	memset(packet.payload, 0, 1600);
-	memcpy(packet.payload, eth_hdr, sizeof(struct ethhdr));
+	changeEtherHeader(&packet, eth_hdr);
 	memcpy(packet.payload + sizeof(struct ethhdr), &arp_hdr, sizeof(struct arp_header));
 	packet.len = sizeof(struct arp_header) + sizeof(struct ethhdr);
 	send_packet(&packet);

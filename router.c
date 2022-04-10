@@ -65,6 +65,8 @@ struct arp_entry* checkIfIPv4ExistsInARP(__u32 ip);
  */
 bool checkTTLAndChecksum(packet m, struct iphdr ip_header, struct ether_header ethernet_header, struct icmphdr* icmp_hdr);
 void changeEtherHeader(packet* m,  struct ether_header* eth_hdr);
+void changeIPHeader(packet *m, struct iphdr* ip_hdr);
+void changeARPHeader(packet *m, struct arp_header* arp_hdr);
 /**
  * @brief Recalculates checksum if only ttl was decremented
  * 
@@ -72,7 +74,7 @@ void changeEtherHeader(packet* m,  struct ether_header* eth_hdr);
  * @param ip_hdr 
  * @return uint16_t 
  */
-uint16_t ttlDecrementChecksum(packet* m, struct iphdr* ip_hdr);
+void ttlDecrementChecksum(packet* m, struct iphdr* ip_hdr);
 /**
  * @brief Get strictest route from table
  * 
@@ -105,6 +107,38 @@ struct icmphdr * getICMPHeader(char *payload);
  * @return struct ether_header* 
  */
 struct ether_header* createEthernetHeader(uint8_t *sha, uint8_t *dha, unsigned short type);
+/**
+ * @brief 
+ * 
+ * @param v 
+ * @param ihl 
+ * @param tos 
+ * @param prot 
+ * @param len 
+ * @param id 
+ * @param frag 
+ * @param ttl 
+ * @param check 
+ * @param daddr 
+ * @param saddr 
+ * @return struct iphdr* 
+ */
+struct iphdr* createIPHeader(unsigned int v, unsigned int ihl, uint8_t tos, uint8_t prot, uint16_t len, uint16_t id, uint16_t frag, uint8_t ttl, uint16_t check, uint32_t daddr, uint32_t saddr);
+/**
+ * @brief 
+ * 
+ * @param daddr 
+ * @param saddr 
+ * @param sha 
+ * @param tha 
+ * @param htype 
+ * @param ptype 
+ * @param hlen 
+ * @param plen 
+ * @param op 
+ * @return struct arp_header* 
+ */
+struct arp_header* createARPHeader(uint32_t daddr, u_int32_t saddr, uint8_t* sha, uint8_t* tha, u_int16_t htype, u_int16_t ptype, uint8_t hlen, u_int8_t plen, uint16_t op);
 /**
  * @brief 
  * 
@@ -275,7 +309,7 @@ int main(int argc, char *argv[])
 				continue;	//Drop the package
 			}
 		}
-		if(icmp_hdr != NULL)
+		else if(icmp_hdr != NULL)
 		{
 			bool success = handleICMP(m, icmp_hdr, ip_hdr, ethernet_hdr);
 			if(!success)
@@ -313,11 +347,12 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 		arp_e->ip = arp_hdr->spa;
 		memcpy(arp_e->mac, ethernet_hdr->ether_shost, 6);
 		arp_table = cons(arp_e, arp_table);
+		printf("%u", arp_e->ip);
 		if(!queue_empty(packageQueue))
 		{
 			packet* pack = queue_deq(packageQueue);
-			struct ether_header* p_eth_hdr = malloc(sizeof(struct ether_header));
-			struct iphdr* p_ip_hdr = malloc(sizeof(struct iphdr));
+			struct ether_header* p_eth_hdr;
+			struct iphdr* p_ip_hdr;
 
 			p_eth_hdr = (struct ether_header*)pack;
 			p_ip_hdr = (struct iphdr*)(pack->payload + sizeof(struct ether_header));
@@ -326,9 +361,6 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 			{
 				return false;
 			}
-
-			p_ip_hdr->ttl--;
-            p_ip_hdr->check = ttlDecrementChecksum(&m, p_ip_hdr);
 
 			int index = getRoute(routeTable, routeTableLength, *p_ip_hdr);
 			struct route_table_entry route;
@@ -396,7 +428,7 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 	}
 
 	ip_hdr->ttl--;
-	ip_hdr->check = ttlDecrementChecksum(&m, ip_hdr);
+	ttlDecrementChecksum(&m, ip_hdr);
 
 	int index = getRoute(routeTable, routeTableLength, *ip_hdr);
 	struct route_table_entry* route;
@@ -469,15 +501,26 @@ bool checkTTLAndChecksum(packet m, struct iphdr ip_header, struct ether_header e
 	return true;
 }
 
-uint16_t ttlDecrementChecksum(packet* m, struct iphdr* ip_hdr)
+void ttlDecrementChecksum(packet* m, struct iphdr* ip_hdr)
 {
 	ip_hdr->check = 0;
-	return ip_checksum((uint8_t*)ip_hdr, sizeof(struct iphdr));
+	ip_hdr->check = ip_checksum((uint8_t*)ip_hdr, sizeof(struct iphdr));
+	changeIPHeader(m, ip_hdr);
 }
 
 void changeEtherHeader(packet* m,  struct ether_header* eth_hdr)
 {
 	memcpy(m->payload, eth_hdr, sizeof(struct ether_header));
+}
+
+void changeIPHeader(packet *m, struct iphdr* ip_hdr)
+{
+	memcpy(m->payload + sizeof(struct ether_header), ip_hdr, sizeof(struct iphdr));
+}
+
+void changeARPHeader(packet *m, struct arp_header* arp_hdr)
+{
+	memcpy(m->payload + sizeof(struct ethhdr), arp_hdr, sizeof(struct arp_header));
 }
 
 int getRoute(struct route_table_entry* routeTable, size_t routeTableLength, struct iphdr ip_hdr)
@@ -558,11 +601,45 @@ struct ether_header* createEthernetHeader(uint8_t *sha, uint8_t *dha, unsigned s
 	return eth_hdr;
 }
 
+struct iphdr* createIPHeader(unsigned int v, unsigned int ihl, uint8_t tos, uint8_t prot, uint16_t len, uint16_t id, uint16_t frag, uint8_t ttl, uint16_t check, uint32_t daddr, uint32_t saddr)
+{
+	struct iphdr* ip_hdr = (struct iphdr*)malloc(sizeof(struct iphdr));
+	ip_hdr->version = v;
+	ip_hdr->ihl = ihl;
+	ip_hdr->tos = tos;
+	ip_hdr->protocol = prot;
+	ip_hdr->tot_len = len;
+	ip_hdr->id = id;
+	ip_hdr->frag_off = frag;
+	ip_hdr->ttl = ttl;
+	ip_hdr->check = check;
+	ip_hdr->daddr = daddr;
+	ip_hdr->saddr = saddr;
+
+	return ip_hdr;
+}
+
+struct arp_header* createARPHeader(uint32_t daddr, u_int32_t saddr, uint8_t* sha, uint8_t* tha, u_int16_t htype, u_int16_t ptype, uint8_t hlen, u_int8_t plen, uint16_t op)
+{
+	struct arp_header* arp_hdr = (struct arp_header*)malloc(sizeof(struct arp_header));
+	arp_hdr->tpa = daddr;
+	arp_hdr->spa = saddr;
+	memcpy(arp_hdr->sha, sha, 6);
+	memcpy(arp_hdr->tha, tha, 6);
+	arp_hdr->htype = htype;
+	arp_hdr->ptype = ptype;
+	arp_hdr->op = op;
+	arp_hdr->hlen = hlen;
+	arp_hdr->plen = plen;
+
+	return arp_hdr;
+}
+
 void sendICMP(uint32_t daddr, uint32_t saddr, uint8_t *sha, uint8_t *dha, u_int8_t type, u_int8_t code, int interface, int id, int seq, bool isError)
 {
 
 	struct ether_header* eth_hdr;
-	struct iphdr ip_hdr;
+	struct iphdr* ip_hdr;
 	struct icmphdr icmp_hdr;
 	icmp_hdr.type = type;
 	icmp_hdr.code = code;
@@ -575,28 +652,16 @@ void sendICMP(uint32_t daddr, uint32_t saddr, uint8_t *sha, uint8_t *dha, u_int8
 	icmp_hdr.checksum = icmp_checksum((uint16_t *)&icmp_hdr, sizeof(struct icmphdr));
 
 	packet packet;
-	void *payload;
 
 	eth_hdr = createEthernetHeader(sha, dha, htons(0x0800));
 
-	ip_hdr.version = 4;
-	ip_hdr.ihl = 5;
-	ip_hdr.tos = 0;
-	ip_hdr.protocol = IPPROTO_ICMP;
-	ip_hdr.tot_len = htons(sizeof(struct iphdr) + sizeof(struct icmphdr));
-	ip_hdr.id = htons(1);
-	ip_hdr.frag_off = 0;
-	ip_hdr.ttl = 64;
-	ip_hdr.check = 0;
-	ip_hdr.daddr = daddr;
-	ip_hdr.saddr = saddr;
-	ip_hdr.check = ip_checksum((uint8_t*)&ip_hdr, sizeof(struct iphdr));
+	ip_hdr = createIPHeader(4, 5, 0, IPPROTO_ICMP, htons(sizeof(struct iphdr) + sizeof(struct icmphdr)), htons(1), 0, 64, 0, daddr, saddr);
+	ip_hdr->check = ip_checksum((uint8_t*)ip_hdr, sizeof(struct iphdr));
 	
 	packet.interface = interface;	
-	payload = packet.payload;
-	memcpy(payload, eth_hdr, sizeof(struct ether_header));
-	memcpy(payload + sizeof(struct ether_header), &ip_hdr, sizeof(struct iphdr));
-	memcpy(payload  + sizeof(struct ether_header) + sizeof(struct iphdr), &icmp_hdr, sizeof(struct icmphdr));
+	changeEtherHeader(&packet, eth_hdr);
+	changeIPHeader(&packet, ip_hdr);
+	memcpy(packet.payload  + sizeof(struct ether_header) + sizeof(struct iphdr), &icmp_hdr, sizeof(struct icmphdr));
 	packet.len = sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr);
 
 	send_packet(&packet);
@@ -605,22 +670,14 @@ void sendICMP(uint32_t daddr, uint32_t saddr, uint8_t *sha, uint8_t *dha, u_int8
 
 void sendARP(uint32_t daddr, uint32_t saddr, struct ether_header *eth_hdr, int interface, uint16_t arp_op)
 {
-	struct arp_header arp_hdr;
+	struct arp_header* arp_hdr;
 	packet packet;
 
-	arp_hdr.htype = htons(1);
-	arp_hdr.ptype = htons(0x0800);
-	arp_hdr.tpa = daddr;
-	arp_hdr.spa = saddr;
-	arp_hdr.op = arp_op;
-	arp_hdr.hlen = 6;
-	arp_hdr.plen = 4;
-	memcpy(arp_hdr.sha, eth_hdr->ether_shost, 6);
-	memcpy(arp_hdr.tha, eth_hdr->ether_dhost, 6);
+	arp_hdr = createARPHeader(daddr, saddr, eth_hdr->ether_shost, eth_hdr->ether_dhost, htons(1), htons(0x0800), 6, 4, arp_op);
 	packet.interface = interface;
 	memset(packet.payload, 0, 1600);
 	changeEtherHeader(&packet, eth_hdr);
-	memcpy(packet.payload + sizeof(struct ethhdr), &arp_hdr, sizeof(struct arp_header));
+	changeARPHeader(&packet, arp_hdr);
 	packet.len = sizeof(struct arp_header) + sizeof(struct ethhdr);
 
 	send_packet(&packet);

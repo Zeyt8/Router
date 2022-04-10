@@ -1,0 +1,33 @@
+-- No IP packet from router
+-- Packet
+###[ Ethernet ]### 
+  dst       = ff:ff:ff:ff:ff:ff
+  src       = ca:fe:ba:be:01:00
+  type      = ARP
+###[ ARP ]### 
+     hwtype    = 0x1
+     ptype     = IPv4
+     hwlen     = 6
+     plen      = 4
+     op        = who-has
+     hwsrc     = ca:fe:ba:be:01:00
+     psrc      = 192.168.2.1
+     hwdst     = ff:ff:ff:ff:ff:ff
+     pdst      = 192.168.2.2
+
+-- Packet
+###[ Ethernet ]### 
+  dst       = ca:fe:ba:be:01:00
+  src       = de:ad:be:ef:00:02
+  type      = ARP
+###[ ARP ]### 
+     hwtype    = 0x1
+     ptype     = IPv4
+     hwlen     = 6
+     plen      = 4
+     op        = is-at
+     hwsrc     = de:ad:be:ef:00:02
+     psrc      = 192.168.2.2
+     hwdst     = ca:fe:ba:be:01:00
+     pdst      = 192.168.2.1
+

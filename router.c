@@ -6,7 +6,7 @@
 
 list arp_table = NULL;
 queue packageQueue;
-FILE* file;
+
 /**
  * @brief Handles an ARP packet
  * 
@@ -245,7 +245,7 @@ int main(int argc, char *argv[])
 	setvbuf(stdout, NULL, _IONBF, 0);
 	packet m;
 	int rc;
-file = fopen("aa.txt", "w+");
+
 	// Do not modify this line
 	init(argc - 2, argv + 2);
 
@@ -255,42 +255,6 @@ file = fopen("aa.txt", "w+");
 
 	mergeSortByMask(routeTable, 0, routeTableLength - 1);
 	mergeSortByPrefix(routeTable, 0, routeTableLength - 1);
-
-	struct arp_entry* arp1 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
-	arp1->ip = inet_addr("192.168.0.2");
-	hwaddr_aton("de:ad:be:ef:00:00", arp1->mac);
-	arp_table = cons(arp1, arp_table);
-
-	struct arp_entry* arp2 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
-	arp2->ip = inet_addr("192.168.1.2");
-	hwaddr_aton("de:ad:be:ef:00:01", arp2->mac);
-	arp_table = cons(arp2, arp_table);
-
-	struct arp_entry* arp3 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
-	arp3->ip = inet_addr("192.168.2.2");
-	hwaddr_aton("de:ad:be:ef:00:02", arp3->mac);
-	arp_table = cons(arp3, arp_table);
-
-	struct arp_entry* arp4 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
-	arp4->ip = inet_addr("192.168.3.2");
-	hwaddr_aton("de:ad:be:ef:00:03", arp4->mac);
-	arp_table = cons(arp4, arp_table);
-
-	struct arp_entry* arp5 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
-	arp5->ip = inet_addr("192.0.1.1");
-	hwaddr_aton("ca:fe:ba:be:00:01", arp5->mac);
-	arp_table = cons(arp5, arp_table);
-
-	struct arp_entry* arp6 = (struct arp_entry*)malloc(sizeof(struct arp_entry));
-	arp6->ip = inet_addr("192.0.1.2");
-	hwaddr_aton("ca:fe:ba:be:01:00", arp6->mac);
-	arp_table = cons(arp6, arp_table);
-
-	struct arp_entry* ent = checkIfIPv4ExistsInARP(arp3->ip);
-	if(ent == NULL)
-	{
-		printf("this is null");
-	}
 
 	while (1) {
 		printf("\nwhile begin\n");
@@ -325,7 +289,6 @@ file = fopen("aa.txt", "w+");
 			continue;	//Drop the package
 		}
 	}
-	fclose(file);
 }
 
 bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTableLength, struct arp_header* arp_hdr, struct ether_header* ethernet_hdr, struct icmphdr* icmp_hdr, struct iphdr* ip_header)
@@ -337,15 +300,11 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 		uint8_t* mac = (uint8_t*)malloc(sizeof(6));
 		get_interface_mac(m.interface, mac);
 		struct ether_header* e_h = createEthernetHeader(mac, ethernet_hdr->ether_shost, ethernet_hdr->ether_type);
-		sendARP(arp_hdr->spa, arp_hdr->tpa, e_h, m.interface, htons(2));
+		sendARP(arp_hdr->spa, arp_hdr->tpa, e_h, m.interface, htons(2));	//2 = arp reply
 		free(e_h);
 		free(mac);
 
 		return false;
-	}
-	else if(ntohs(arp_hdr->op) == 1)
-	{
-		return false;	//Drop the package
 	}
 	//If reply
 	else if(ntohs(arp_hdr->op) == 2)	// 2 = arp reply
@@ -408,6 +367,10 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 			return false;	//Drop the packet
 		}
 	}
+	else
+	{
+		return false;
+	}
 	return true;
 }
 
@@ -436,16 +399,15 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 	ip_hdr->check = ttlDecrementChecksum(&m, ip_hdr);
 
 	int index = getRoute(routeTable, routeTableLength, *ip_hdr);
-	struct route_table_entry route;
+	struct route_table_entry* route;
 	if(index == -1)
 	{
 		sendICMP(ip_hdr->saddr, ip_hdr->daddr, ethernet_hdr->ether_dhost, ethernet_hdr->ether_shost, 3, 0, m.interface, icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence, true);
 		return false;	//Drop packet
 	}
-	route = routeTable[index];
-	printf("%u %u %u %u", ip_hdr->daddr, route.prefix, route.next_hop, route.mask);
+	route = &routeTable[index];
 
-	struct arp_entry* entry = checkIfIPv4ExistsInARP(route.next_hop);
+	struct arp_entry* entry = checkIfIPv4ExistsInARP(route->next_hop);
 	uint8_t* macSource = (uint8_t*)malloc(sizeof(6));
 	get_interface_mac(m.interface, macSource);
 	if(entry == NULL)
@@ -455,7 +417,7 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 		hwaddr_aton("FF:FF:FF:FF:FF:FF", macDest);
 		struct ether_header* eth_hdr = createEthernetHeader(macSource, macDest, htons(0x806));
 
-		sendARP(route.next_hop, inet_addr(get_interface_ip(route.interface)), eth_hdr, route.interface, htons(1));	// 1 = arp request
+		sendARP(route->next_hop, inet_addr(get_interface_ip(route->interface)), eth_hdr, route->interface, htons(1));	// 1 = arp request
 
 		free(macSource);
 		free(macDest);
@@ -466,7 +428,7 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 	{
 		struct ether_header* eth_hdr = createEthernetHeader(macSource, entry->mac, ethernet_hdr->ether_type);
 		changeEtherHeader(&m, eth_hdr);
-		m.interface = route.interface;
+		m.interface = route->interface;
 
 		send_packet(&m);
 		free(eth_hdr);
@@ -540,7 +502,7 @@ int getRoute(struct route_table_entry* routeTable, size_t routeTableLength, stru
 	}
 	return -1;*/
 	int index = -1;
-	int biggestMask = 0;
+	uint32_t biggestMask = 0;
 	for(int i=0;i<routeTableLength;i++)
 	{
 		if((ip_hdr.daddr & routeTable[i].mask) == routeTable[i].prefix)
@@ -648,17 +610,18 @@ void sendARP(uint32_t daddr, uint32_t saddr, struct ether_header *eth_hdr, int i
 
 	arp_hdr.htype = htons(1);
 	arp_hdr.ptype = htons(0x0800);
+	arp_hdr.tpa = daddr;
+	arp_hdr.spa = saddr;
 	arp_hdr.op = arp_op;
 	arp_hdr.hlen = 6;
 	arp_hdr.plen = 4;
 	memcpy(arp_hdr.sha, eth_hdr->ether_shost, 6);
 	memcpy(arp_hdr.tha, eth_hdr->ether_dhost, 6);
-	arp_hdr.spa = saddr;
-	arp_hdr.tpa = daddr;
 	packet.interface = interface;
 	memset(packet.payload, 0, 1600);
 	changeEtherHeader(&packet, eth_hdr);
 	memcpy(packet.payload + sizeof(struct ethhdr), &arp_hdr, sizeof(struct arp_header));
 	packet.len = sizeof(struct arp_header) + sizeof(struct ethhdr);
+
 	send_packet(&packet);
 }

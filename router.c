@@ -347,7 +347,6 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 		arp_e->ip = arp_hdr->spa;
 		memcpy(arp_e->mac, ethernet_hdr->ether_shost, 6);
 		arp_table = cons(arp_e, arp_table);
-		printf("%u", arp_e->ip);
 		if(!queue_empty(packageQueue))
 		{
 			packet* pack = queue_deq(packageQueue);
@@ -408,6 +407,21 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 
 bool handleICMP(packet m, struct icmphdr* icmp_hdr, struct iphdr* ip_hdr, struct ether_header* ethernet_hdr)
 {
+	if(ip_hdr->ttl <= 1)
+	{
+		sendICMP(ip_hdr->saddr, ip_hdr->daddr, ethernet_hdr->ether_dhost, ethernet_hdr->ether_shost, 11, 0, icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence, m.interface, true);
+		return false;
+	}
+
+	uint16_t check = icmp_hdr->checksum;
+	icmp_hdr->checksum = 0;
+	icmp_hdr->checksum = icmp_checksum((uint16_t*)icmp_hdr, sizeof(icmp_hdr));
+
+	if(check != icmp_hdr->checksum)
+	{
+		return false;
+	}
+
 	in_addr_t address = inet_addr(get_interface_ip(m.interface));
 	if(ip_hdr->daddr == address && icmp_hdr->type == 8)	//8 = echo request
 	{
@@ -444,6 +458,7 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 	get_interface_mac(m.interface, macSource);
 	if(entry == NULL)
 	{
+		printf("mac not found: %u\n", route->next_hop);
 		queue_enq(packageQueue, &m);
 		uint8_t* macDest = (uint8_t*)malloc(sizeof(6));
 		hwaddr_aton("FF:FF:FF:FF:FF:FF", macDest);
@@ -460,7 +475,7 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 	{
 		struct ether_header* eth_hdr = createEthernetHeader(macSource, entry->mac, ethernet_hdr->ether_type);
 		changeEtherHeader(&m, eth_hdr);
-		m.interface = route->interface;
+		(&m)->interface = route->interface;
 
 		send_packet(&m);
 		free(eth_hdr);

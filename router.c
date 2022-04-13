@@ -291,7 +291,6 @@ int main(int argc, char *argv[])
 	mergeSortByPrefix(routeTable, 0, routeTableLength - 1);
 
 	while (1) {
-		printf("\nwhile begin\n");
 		rc = get_packet(&m);
 		DIE(rc < 0, "get_packet");
 		/* TODO */
@@ -550,11 +549,11 @@ int getRoute(struct route_table_entry* routeTable, size_t routeTableLength, stru
 	while(l <= r)
 	{
 		int mid = l + (r - l) / 2;
-		if((mid == 0 || routeTable[mid - 1].prefix < (ip_hdr.daddr & routeTable[mid - 1].mask)) && routeTable[mid - 1].prefix == (ip_hdr.daddr & routeTable[mid].mask))
+		if(routeTable[mid].prefix == (ip_hdr.daddr & routeTable[mid].mask))
 		{
 			return mid;
 		}
-		else if((ip_hdr.daddr & routeTable[mid].mask) > routeTable[mid].prefix)
+		else if(ip_hdr.daddr > routeTable[mid].prefix)
 		{
 			l = mid + 1;
 		}

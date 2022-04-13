@@ -518,8 +518,13 @@ bool checkTTLAndChecksum(packet m, struct iphdr ip_header, struct ether_header e
 
 void ttlDecrementChecksum(packet* m, struct iphdr* ip_hdr)
 {
-	ip_hdr->check = 0;
-	ip_hdr->check = ip_checksum((uint8_t*)ip_hdr, sizeof(struct iphdr));
+	//ip_hdr->check = 0;
+	//ip_hdr->check = ip_checksum((uint8_t*)ip_hdr, sizeof(struct iphdr));
+	uint16_t oldCheck = ip_hdr->check;
+	uint8_t currTTL = ip_hdr->ttl;
+	uint8_t oldTTL = currTTL + 1;
+	uint16_t newCheck = ~(~oldCheck + (-oldTTL) + currTTL);
+	ip_hdr->check = newCheck;
 	changeIPHeader(m, ip_hdr);
 }
 

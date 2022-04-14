@@ -15,8 +15,8 @@ queue packageQueue;
  * @param routeTableLength
  * @param arp_hdr ARP header of the packet
  * @param ethernet_hdr Ethernet header of the packet
- * @param icmp_hdr
- * @param ip_header
+ * @param icmp_hdr ICMP header of the packet
+ * @param ip_header	IP header of the packet
  * @return true: the handling was succesful
  * @return false: drop the package
  */
@@ -33,15 +33,15 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
  */
 bool handleICMP(packet m, struct icmphdr* icmp_hdr, struct iphdr* ip_hdr, struct ether_header* ethernet_hdr);
 /**
- * @brief 
+ * @brief Handles ICMP packet
  * 
- * @param routeTable 
- * @param routeTableLength 
- * @param m 
- * @param arp_hdr 
- * @param ip_hdr 
- * @param ethernet_hdr 
- * @param icmp_hdr 
+ * @param routeTable Route table
+ * @param routeTableLength Length of the route table
+ * @param m Packet
+ * @param arp_hdr ARP header of the packet
+ * @param ip_hdr IP header of the packet
+ * @param ethernet_hdr Ethernet header of the packet
+ * @param icmp_hdr ICMP header of the packet
  * @return true 
  * @return false 
  */
@@ -50,7 +50,7 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
  * @brief Finds ipv4 address in arp_table if it exists
  * 
  * @param ip ip
- * @return struct arp_entry* 
+ * @return struct arp_entry* the entry if it exists, nullptr otherwise
  */
 struct arp_entry* checkIfIPv4ExistsInARP(__u32 ip);
 /**
@@ -59,7 +59,7 @@ struct arp_entry* checkIfIPv4ExistsInARP(__u32 ip);
  * @param m packet to check
  * @param ip_header ip header of packet
  * @param ethernet_header ethernet header of packet
- * @param icmp_hdr
+ * @param icmp_hdr	ICMP header of the packet
  * @return true: ttl and checksum check out
  * @return false: ttl expired or checksum is wrong 
  */
@@ -70,36 +70,36 @@ void changeARPHeader(packet *m, struct arp_header* arp_hdr);
 /**
  * @brief Recalculates checksum if only ttl was decremented
  * 
- * @param m
- * @param ip_hdr 
- * @return uint16_t 
+ * @param m	Packet
+ * @param ip_hdr IP header of the packet
+ * @return 
  */
 void ttlDecrementChecksum(packet* m, struct iphdr* ip_hdr);
 /**
  * @brief Get strictest route from table
  * 
- * @param routeTable 
- * @param routeTableLength
- * @param ip_hdr 
+ * @param routeTable Route table
+ * @param routeTableLength	Length of the route table
+ * @param ip_hdr Ip to search for
  * @return int
  */
 int getRoute(struct route_table_entry* routeTable, size_t routeTableLength, struct iphdr ip_hdr);
 /**
- * @brief 
+ * @brief Extracts ARP header of packet
  * 
- * @param payload 
+ * @param payload Packet payload
  * @return struct arp_header* The arp header or NULL if it is not an arp packet
  */
 struct arp_header* getARPHeader(char *payload);
 /**
- * @brief 
+ * @brief Extracts ICMP header of packet
  * 
- * @param payload 
+ * @param payload Packet payload
  * @return struct icmphdr* The icmp header or null if it is not an icmp packet
  */
 struct icmphdr * getICMPHeader(char *payload);
 /**
- * @brief Create a Ethernet Header object
+ * @brief Create a Ethernet Header
  * 
  * @param sha source ethernet address
  * @param dha destination ethernet address
@@ -108,7 +108,7 @@ struct icmphdr * getICMPHeader(char *payload);
  */
 struct ether_header* createEthernetHeader(uint8_t *sha, uint8_t *dha, unsigned short type);
 /**
- * @brief 
+ * @brief Create an IP header
  * 
  * @param v 
  * @param ihl 
@@ -125,7 +125,7 @@ struct ether_header* createEthernetHeader(uint8_t *sha, uint8_t *dha, unsigned s
  */
 struct iphdr* createIPHeader(unsigned int v, unsigned int ihl, uint8_t tos, uint8_t prot, uint16_t len, uint16_t id, uint16_t frag, uint8_t ttl, uint16_t check, uint32_t daddr, uint32_t saddr);
 /**
- * @brief 
+ * @brief Create an ARP header
  * 
  * @param daddr 
  * @param saddr 
@@ -140,7 +140,7 @@ struct iphdr* createIPHeader(unsigned int v, unsigned int ihl, uint8_t tos, uint
  */
 struct arp_header* createARPHeader(uint32_t daddr, u_int32_t saddr, uint8_t* sha, uint8_t* tha, u_int16_t htype, u_int16_t ptype, uint8_t hlen, u_int8_t plen, uint16_t op);
 /**
- * @brief 
+ * @brief Send an icmp packet
  * 
  * @param daddr destination IP
  * @param saddr source IP
@@ -154,7 +154,7 @@ struct arp_header* createARPHeader(uint32_t daddr, u_int32_t saddr, uint8_t* sha
  */
 void sendICMP(uint32_t daddr, uint32_t saddr, uint8_t *sha, uint8_t *dha, u_int8_t type, u_int8_t code, int interface, int id, int seq, bool isError);
 /**
- * @brief 
+ * @brief Send an ARP packet
  * 
  * @param daddr destination IP address
  * @param saddr source IP address
@@ -346,7 +346,7 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 		arp_e->ip = arp_hdr->spa;
 		memcpy(arp_e->mac, ethernet_hdr->ether_shost, 6);
 		arp_table = cons(arp_e, arp_table);
-		if(!queue_empty(packageQueue))
+		if(!queue_empty(packageQueue))	//Dequeue queued package if it exists
 		{
 			packet* pack = queue_deq(packageQueue);
 			struct ether_header* p_eth_hdr;
@@ -363,7 +363,7 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 			int index = getRoute(routeTable, routeTableLength, *p_ip_hdr);
 			struct route_table_entry route;
 
-			if(index == -1)
+			if(index == -1)	//If route not found
 			{
 				sendICMP(p_ip_hdr->saddr, p_ip_hdr->daddr, p_eth_hdr->ether_dhost, p_eth_hdr->ether_shost, 3, 0, m.interface, icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence, true);
                 free(p_eth_hdr);
@@ -384,7 +384,7 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 
 				m.interface = route.interface;
 
-				send_packet(&m);
+				send_packet(&m);	//Forward
 
 				free(header);
 				free(p_eth_hdr);
@@ -406,12 +406,13 @@ bool handleARP(packet m, struct route_table_entry* routeTable, size_t routeTable
 
 bool handleICMP(packet m, struct icmphdr* icmp_hdr, struct iphdr* ip_hdr, struct ether_header* ethernet_hdr)
 {
-	if(ip_hdr->ttl <= 1)
+	if(ip_hdr->ttl <= 1)	//Check ttl
 	{
 		sendICMP(ip_hdr->saddr, ip_hdr->daddr, ethernet_hdr->ether_dhost, ethernet_hdr->ether_shost, 11, 0, icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence, m.interface, true);
 		return false;
 	}
 
+	//Check checksum
 	uint16_t check = icmp_hdr->checksum;
 	icmp_hdr->checksum = 0;
 	icmp_hdr->checksum = icmp_checksum((uint16_t*)icmp_hdr, sizeof(icmp_hdr));
@@ -445,7 +446,7 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 
 	int index = getRoute(routeTable, routeTableLength, *ip_hdr);
 	struct route_table_entry* route;
-	if(index == -1)
+	if(index == -1)	//If route does not exist
 	{
 		sendICMP(ip_hdr->saddr, ip_hdr->daddr, ethernet_hdr->ether_dhost, ethernet_hdr->ether_shost, 3, 0, m.interface, icmp_hdr->un.echo.id, icmp_hdr->un.echo.sequence, true);
 		return false;	//Drop packet
@@ -455,9 +456,8 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 	struct arp_entry* entry = checkIfIPv4ExistsInARP(route->next_hop);
 	uint8_t* macSource = (uint8_t*)malloc(sizeof(6));
 	get_interface_mac(m.interface, macSource);
-	if(entry == NULL)
+	if(entry == NULL)	//If there is no entry in arp_table
 	{
-		printf("mac not found: %u\n", route->next_hop);
 		queue_enq(packageQueue, &m);
 		uint8_t* macDest = (uint8_t*)malloc(sizeof(6));
 		hwaddr_aton("FF:FF:FF:FF:FF:FF", macDest);
@@ -476,7 +476,7 @@ bool handleForwarding(struct route_table_entry* routeTable, size_t routeTableLen
 		changeEtherHeader(&m, eth_hdr);
 		(&m)->interface = route->interface;
 
-		send_packet(&m);
+		send_packet(&m);	//Forward
 		free(eth_hdr);
 	}
 	return true;

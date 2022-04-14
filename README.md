@@ -29,7 +29,7 @@ TTL Decrement Checksum:
     Logica este preluata de aici: https://datatracker.ietf.org/doc/rfc1624/
 
 Get route:
-    Parcurge liniar tabela de routare.
+    Parcurge liniar tabela de routare. In comenturi se afla o incercare de cautare binara. Tabela este sortata la inceput cu un merge sort in functie de prefix si masca.
 
 Send ARP si ICMP:
     Creeaza headerele necesare din argumentele date. Creeaza un pachet nou in care introduce aceste headere si il trimite.

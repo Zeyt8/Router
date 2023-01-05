@@ -1,6 +1,0 @@
-{
-    "files.associations": {
-        "ethernet.h": "c",
-        "skel.h": "c"
-    }
-}

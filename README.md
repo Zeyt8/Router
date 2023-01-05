@@ -1,35 +1,50 @@
-Foca Bogdan 324CD
+# Router
 
-Am rezolvat cerintele:
-    -Protocolul ARP
-    -Procesul de dirijare
-    -Protocolul ICMP
-    -BONUS: actualizare sumei de control incrementale
+I have solved the following requirements:
 
-In main extrag headerele din pachetul primit.
-Tipul pachetului(ARP sau ICMP) este stabilit din existenta headerelor de ARP sau ICMP.
-Se apeleaza functiile handleARP sau handleICMP care returneaza un bool. Acest bool este fals in cazul in care pachetul trebuie droppuit sau in cazul in care s-a terminat functionalitatea lui si nu este nevoie de el mai departe.
-Daca boolul este adevarat, codul ajunge in handleForwarding unde pachetul este forwarded mai departe.
+- ARP protocol
+- Routing process
+- ICMP protocol
+- BONUS: incremental checksum update
 
-Handle ARP:
-    Se stabileste daca pachetul ARP este de tipul request sau reply verificand valoarea din arp_hdr->op.
-    Daca este de tipul request, atunci se trimite un arp reply la sursa de unde a venit requestul.
-    Daca este de tipul reply, se verifica daca exista vreun pachet in coada de pachete pastrate. Daca exista, le verific checksumul(ttl-ul nu, intrucat a fost deja updatat cand l-am adaugat in coada). Daca totul este ok, se gaseste ruta si daca exista updatez ethernet_headerul cu macul aferent si trimit pachetul.
+In the main function, I extract the headers from the received packet.
 
-Handle ICMP:
-    Se verifica ttl si icmp checksum. Daca pachetul este pentru routerul curent si este de tipul echo request atunci trimit un ICMP inapoi la sursa.
+The type of the packet (ARP or ICMP) is determined by the presence of ARP or ICMP headers.
 
-Handle Forwarding:
-    Se verifica ttl si checksum. Ttl este updatat si checksumul la fel. Se cauta o ruta si daca nu exista se trimite un ICMP error inapoi la sursa.
-    Se cauta adresa mac necesara in tabela ARP. Daca nu exista atunci pachetul este introdus in coada si se trimite un ARP broadcast.
-    Daca este gasita o adresa mac, se updateaza ethernet headerul cu mac-ul urmatorului hop si se trimite pachetul.
+The handleARP or handleICMP functions are called, which return a bool. This bool is false if the packet needs to be dropped or if its functionality has ended and it is not needed further.
 
-TTL Decrement Checksum:
-    Updatarea checksumului in urma modificarii ttl.
-    Logica este preluata de aici: https://datatracker.ietf.org/doc/rfc1624/
+If the bool is true, the code reaches handleForwarding where the packet is forwarded further.
 
-Get route:
-    Parcurge liniar tabela de routare. In comenturi se afla o incercare de cautare binara. Tabela este sortata la inceput cu un merge sort in functie de prefix si masca.
+## Handle ARP
 
-Send ARP si ICMP:
-    Creeaza headerele necesare din argumentele date. Creeaza un pachet nou in care introduce aceste headere si il trimite.
+The type of the ARP packet (request or reply) is determined by checking the value of arp_hdr->op.
+
+If it is a request, an ARP reply is sent to the source where the request came from.
+
+If it is a reply, it checks if there are any packets in the saved packet queue. If there are, it verifies the checksum (ttl is not checked because it was already updated when it was added to the queue). If everything is okay, it finds the route and if it exists, it updates the ethernet_header with the corresponding MAC and sends the packet.
+
+## Handle ICMP
+
+The ttl and icmp checksum are checked. If the packet is for the current router and is an echo request, then an ICMP is sent back to the source.
+
+## Handle Forwarding
+
+The ttl and checksum are checked. The ttl is updated and the checksum is updated as well. A route is searched for and if it does not exist, an ICMP error is sent back to the source.
+
+The necessary MAC address is searched for in the ARP table. If it does not exist, the packet is placed in the queue and an ARP broadcast is sent.
+
+If a MAC address is found, the ethernet header is updated with the MAC of the next hop and the packet is sent.
+
+## TTL Decrement Checksum
+
+Updating the checksum following modification of the ttl.
+
+The logic is taken from here: https://datatracker.ietf.org/doc/rfc1624/
+
+## Get route
+
+It linearly traverses the routing table. In the comments, there is an attempt at binary search. The table is initially sorted with a merge sort based on the prefix and mask.
+
+## Send ARP and ICMP
+
+It creates the necessary headers from the given arguments. It creates a new packet in which it inserts these headers and sends it.

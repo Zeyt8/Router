@@ -1,4 +1,8 @@
-# Router
+# Router - Communication Protocols - Project 1
+
+A pdf with the detailed description can be found in the repo.
+
+#
 
 I have solved the following requirements:
 
